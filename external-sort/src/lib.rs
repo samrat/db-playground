@@ -89,7 +89,7 @@ fn read_record(offsets: RowOffsets, data: Vec<u8>, row_num: usize)
     (key, val)
 }
 
-struct BufferPoolManager {
+pub struct BufferPoolManager {
     input_file: File,
     // runs of fileA go into fileB as they are sorted; in the next
     // pass, runs from fileB get moved to fileA, and so on.
@@ -126,8 +126,9 @@ impl BufferPoolManager {
     pub fn read_records(&self, data: &[u8]) -> Vec<(i32,Vec<u8>)> {
         let num_records_bytes = data[0..8].to_vec();
         let num_records = bytearray_to_usize(num_records_bytes);
+        println!("num_records: {}", num_records);
         let mut records = Vec::with_capacity(num_records);
-        let valsize = 8;        // NOTE: fixed size(hacky)
+        let valsize = 4;        // NOTE: fixed size(hacky)
         for i in 0..num_records {
             let offsets = compute_offsets(i, valsize);
             records.push(read_record(offsets, data.to_vec(), i));
@@ -160,21 +161,27 @@ impl BufferPoolManager {
         let mut b_iter = self.input_buffers[1].records
             .iter().peekable();
         let mut first_a = a_iter.next();
-        let mut first_b = a_iter.next();
+        let mut first_b = b_iter.next();
         loop {
+            
             match (first_a, first_b) {
                 (None, None) => break,
                 (Some(fa), Some(fb)) => {
                     if fa.0 < fb.0 {
+                        println!("first_a: {:?}", first_a);
                         first_a = a_iter.next();
                     } else {
-                        first_b = a_iter.next();
+                        println!("first_b: {:?}", first_b);
+                        first_b = b_iter.next();
+                        
                     }
                 },
                 (Some(fa), None) => {
+                    println!("first_a: {:?}", first_a);
                     first_a = a_iter.next();
                 },
                 (None, Some(fa)) => {
+                    println!("first_b: {:?}", first_b);
                     first_b = b_iter.next();
                 },
             }
@@ -184,8 +191,13 @@ impl BufferPoolManager {
 
 #[cfg(test)]
 mod tests {
+    use BufferPoolManager;
+    
     #[test]
     fn it_works() {
+        let mut bp = BufferPoolManager::new("test2");
+        bp.merge(0, 1);
+        
         assert_eq!(2 + 2, 4);
     }
 }
