@@ -20,6 +20,13 @@ fn bytearray_to_i32(b: Vec<u8>) -> i32 {
     }
 }
 
+pub fn i32_to_bytearray(n: i32) -> [u8; 4] {
+    unsafe {
+        mem::transmute::<i32, [u8;4]>(n)
+    }
+}
+
+
 fn bytearray_to_usize(b: Vec<u8>) -> usize {
     assert_eq!(b.len(), 8);
     let mut a = [0; 8];
@@ -87,6 +94,12 @@ fn read_record(offsets: RowOffsets, data: Vec<u8>, row_num: usize)
         data[offsets.key_offset..offsets.val_offset].to_vec());
     let val = data[offsets.val_offset..offsets.row_end].to_vec();
     (key, val)
+}
+
+pub fn mem_move(dest: &mut [u8], src: &[u8]) {
+    for (d, s) in dest.iter_mut().zip(src) {
+        *d = *s
+    }
 }
 
 pub struct BufferPoolManager {
@@ -163,29 +176,34 @@ impl BufferPoolManager {
         let mut first_a = a_iter.next();
         let mut first_b = b_iter.next();
         loop {
-            
             match (first_a, first_b) {
                 (None, None) => break,
                 (Some(fa), Some(fb)) => {
                     if fa.0 < fb.0 {
-                        println!("first_a: {:?}", first_a);
+                        self.output_buffer.records.push(fa.clone());
                         first_a = a_iter.next();
                     } else {
-                        println!("first_b: {:?}", first_b);
+                        self.output_buffer.records.push(fb.clone());
                         first_b = b_iter.next();
                         
                     }
                 },
                 (Some(fa), None) => {
-                    println!("first_a: {:?}", first_a);
+                    self.output_buffer.records.push(fa.clone());
                     first_a = a_iter.next();
                 },
-                (None, Some(fa)) => {
-                    println!("first_b: {:?}", first_b);
+                (None, Some(fb)) => {
+                    self.output_buffer.records.push(fb.clone());
                     first_b = b_iter.next();
                 },
             }
+
+            // TODO: check if output buffer is full(# records >
+            // max). If it is full, write to file. And continue with
+            // empty buffer.
         }
+
+        println!("{:?}", self.output_buffer.records);
     }
 }
 
