@@ -262,9 +262,8 @@ impl BufferPoolManager {
         self.flush_output_buffer(output_file_index, output_page_id);
     }
 
-    pub fn sort_all(num_pages: usize) {
-        let mut bp = BufferPoolManager::new("test1");
-        bp.sort_pages(num_pages);
+    pub fn sort_all(&mut self, num_pages: usize) {
+        self.sort_pages(num_pages);
         let mut run_size = 1;
 
         let mut src_file = 1;
@@ -278,7 +277,7 @@ impl BufferPoolManager {
                 let group_start = i*group_size;
                 let first_run = group_start;
                 let second_run = group_start + run_size;
-                bp.merge(first_run, second_run, run_size, src_file, dest_file);
+                self.merge(first_run, second_run, run_size, src_file, dest_file);
                 println!("\tfirst_run: {} second_run: {}", first_run, second_run);
             }
 
@@ -298,9 +297,7 @@ mod tests {
     #[test]
     fn it_works() {
         let mut bp = BufferPoolManager::new("test1");
-        // bp.sort_pages(3);
-        // bp.merge(0, 2, 2, 0, 1);
-        BufferPoolManager::sort_all(4);
+        bp.sort_all(4);
         
         assert_eq!(2 + 2, 4);
     }
