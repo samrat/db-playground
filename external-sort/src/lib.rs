@@ -38,7 +38,7 @@ impl Page {
             num_records: 0,
         }
     }
-    
+
     pub fn sort(&mut self) {
         self.records.sort_by(|&(ref ak, ref av), &(ref bk, ref bv)|
                              ak.cmp(&bk));
@@ -134,7 +134,7 @@ impl ExternalMergeSort {
         file.flush().expect("flush failed");
     }
 
-    pub fn read_records(&self, data: &[u8]) -> Vec<(i32,Vec<u8>)> {
+    pub fn read_records(data: &[u8]) -> Vec<(i32,Vec<u8>)> {
         let num_records_bytes = data[0..8].to_vec();
         let num_records = bytearray_to_usize(num_records_bytes);
         println!("num_records: {}", num_records);
@@ -160,7 +160,7 @@ impl ExternalMergeSort {
         input_file.read(&mut storage)
             .expect("Could not read file");
         self.input_buffers[bufpool_id].records =
-            self.read_records(&storage);
+            Self::read_records(&storage);
     }
 
     /// Sort records within pages(this is "pass 0" in the algorithm)
@@ -180,7 +180,7 @@ impl ExternalMergeSort {
     }
 
     fn flush_output_buffer(&mut self, output_file_index: usize, output_page_id: usize) {
-        println!("page={}, writing {:?}", output_page_id, self.output_buffer.records);
+        // println!("page={}, writing {:?}", output_page_id, self.output_buffer.records);
         let records = mem::replace(&mut self.output_buffer.records,
                                    vec![]);
         let new_page_data =
@@ -196,7 +196,7 @@ impl ExternalMergeSort {
         // fetch pages a and b into input buffers
         self.fetch_page(input_file_index, a, 0);
         self.fetch_page(input_file_index, b, 1);
-        
+
         // merge a and b into output_buffer
         let mut a_iter = self.input_buffers[0].records.clone()
             .into_iter();
@@ -206,7 +206,7 @@ impl ExternalMergeSort {
         let mut first_b = b_iter.next();
         let a_end = a+run_size-1;
         let b_end = b+run_size-1;
-        
+
         let output_buffer = [0; PAGE_SIZE];
         // start filling at page a in output file
         let mut output_page_id = a;
@@ -283,6 +283,26 @@ impl ExternalMergeSort {
             }
 
             run_size *= 2;
+
+            // delete the file whose pages we just merged
+            let src_file_name = match src_file {
+                1 => "/tmp/file_a",
+                2 => "/tmp/file_b",
+                _ => panic!("impossible"),
+            };
+            fs::remove_file(src_file_name);
+            // create a new file to use as the destination in next
+            // iteration
+            let new_src_file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create_new(true)
+                .open(src_file_name)
+                .ok()
+                .unwrap();
+            self.files[src_file] = new_src_file;
+
+            // swap
             let temp = src_file;
             src_file = dest_file;
             dest_file = temp;
@@ -293,7 +313,7 @@ impl ExternalMergeSort {
 
     pub fn sort_file(input_filename: &str, output_filename: &str) {
         let mut ems = ExternalMergeSort::new(input_filename);
-        let num_bytes = std::fs::metadata("test1").ok().unwrap().len();
+        let num_bytes = std::fs::metadata(input_filename).ok().unwrap().len();
         let num_pages = (num_bytes as f32 / PAGE_SIZE as f32).ceil() as usize;
         let file_index = ems.sort_all(num_pages);
         let filename = match file_index {
@@ -305,15 +325,76 @@ impl ExternalMergeSort {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use ExternalMergeSort;
-    
+    use serialize_records;
+    use util::*;
+    use PAGE_SIZE;
+
+    use std::fs::OpenOptions;
+    use std::io::prelude::*;
+    use std::io::SeekFrom;
+
+    extern crate rand;
+    use tests::rand::Rng;
+
+    fn create_rand_file() -> Vec<(i32, Vec<u8>)> {
+        let records_per_page = 511;
+        let mut rng = rand::thread_rng();
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open("/tmp/gen_rand")
+            .ok()
+            .unwrap();
+        let mut all_records = Vec::with_capacity(8*records_per_page);
+        for p in 0..8 {
+            let mut records = Vec::with_capacity(records_per_page);
+            for i in 0..records_per_page {
+                records.push((rng.gen::<i32>(), vec![111,0,0,0]));
+            }
+            let storage = serialize_records(records.clone());
+            all_records.append(&mut records);
+            ExternalMergeSort::write_page(&file, p, &storage)
+        }
+
+        all_records.sort_by(|a, b| a.0.cmp(&b.0));
+        all_records
+    }
+
     #[test]
+    fn test_sort() {
+        let expected = create_rand_file();
+        ExternalMergeSort::sort_file("/tmp/gen_rand", "/tmp/gen_rand-sorted");
+
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open("/tmp/gen_rand-sorted")
+            .ok()
+            .unwrap();
+        let mut actual = vec![];
+        for i in 0..8 {
+            let mut storage = [0; PAGE_SIZE];
+            file.seek(SeekFrom::Start(i*PAGE_SIZE as u64))
+                .expect("Could not seek to offset");
+            file.read(&mut storage)
+                .expect("Could not read file");
+
+            actual.append(&mut ExternalMergeSort::read_records(&storage));
+        }
+        println!("[test] expected.len = {} actual.len = {}", expected.len(), actual.len());
+        assert_eq!(expected, actual);
+    }
+
     fn it_works() {
-        let mut bp = ExternalMergeSort::sort_file("test1", "/tmp/foo");
+        let mut bp = ExternalMergeSort::sort_file("/tmp/randfile", "/tmp/randfile-sorted");
         // bp.sort_all(4);
-        
+        println!("{:?}", create_rand_file());
         assert_eq!(2 + 2, 4);
     }
 }
