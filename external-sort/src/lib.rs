@@ -44,8 +44,7 @@ impl Page {
     }
 }
 
-fn compute_offsets(row_num: usize, valsize: usize) -> RowOffsets {
-    let keysize = KEY_SIZE;        // i32
+fn compute_offsets(row_num: usize, keysize: usize, valsize: usize) -> RowOffsets {
     let total_size = keysize + valsize;
 
     let row_offset = HEADER_SIZE + (row_num * total_size);
@@ -69,7 +68,7 @@ fn read_record(offsets: RowOffsets, data: Vec<u8>)
     (key, val)
 }
 
-pub fn mem_move(dest: &mut [u8], src: &[u8]) {
+fn mem_move(dest: &mut [u8], src: &[u8]) {
     for (d, s) in dest.iter_mut().zip(src) {
         *d = *s
     }
@@ -83,10 +82,11 @@ fn write_record(offsets: RowOffsets, data: &mut [u8],
 
 fn serialize_records(records: Vec<(i32, Vec<u8>)>) -> [u8; PAGE_SIZE] {
     let mut storage = [0; PAGE_SIZE];
+    let keysize = KEY_SIZE;
     let valsize = VAL_SIZE;
     mem_move(&mut storage[0..8], &i32_to_bytearray(records.len() as i32));
     for (i, (k,v)) in records.into_iter().enumerate() {
-        let offsets = compute_offsets(i, valsize);
+        let offsets = compute_offsets(i, keysize, valsize);
         write_record(offsets, &mut storage, k, &v);
     }
     storage
@@ -138,9 +138,10 @@ impl BufferPoolManager {
         let num_records = bytearray_to_usize(num_records_bytes);
         println!("num_records: {}", num_records);
         let mut records = Vec::with_capacity(num_records);
+        let keysize = KEY_SIZE;
         let valsize = VAL_SIZE;
         for i in 0..num_records {
-            let offsets = compute_offsets(i, valsize);
+            let offsets = compute_offsets(i, keysize, valsize);
             records.push(read_record(offsets, data.to_vec()));
         }
 
