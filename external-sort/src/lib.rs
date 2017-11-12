@@ -188,43 +188,62 @@ impl BufferPoolManager {
     }
 
     
-    fn merge(&mut self, a: usize, b: usize, 
+    fn merge(&mut self, mut a: usize, mut b: usize, run_size: usize,
              input_file_index: usize, output_file_index: usize) {
         // fetch pages a and b into input buffers
         self.fetch_page(input_file_index, a, 0);
         self.fetch_page(input_file_index, b, 1);
         
         // merge a and b into output_buffer
-        let mut a_iter = self.input_buffers[0].records
-            .iter().peekable();
-        let mut b_iter = self.input_buffers[1].records
-            .iter().peekable();
+        let mut a_iter = self.input_buffers[0].records.clone()
+            .into_iter();
+        let mut b_iter = self.input_buffers[1].records.clone()
+            .into_iter();
         let mut first_a = a_iter.next();
         let mut first_b = b_iter.next();
+        let a_end = a+run_size;
+        let b_end = b+run_size;
         
         let output_buffer = [0; PAGE_SIZE];
-        let mut output_page_id = 0;
+        // start filling at page a in output file
+        let mut output_page_id = a;
         loop {
-            match (first_a, first_b) {
+            match (first_a.clone(), first_b.clone()) {
                 (None, None) => break,
                 (Some(fa), Some(fb)) => {
                     if fa.0 < fb.0 {
                         self.output_buffer.records.push(fa.clone());
                         first_a = a_iter.next();
-                        
                     } else {
                         self.output_buffer.records.push(fb.clone());
                         first_b = b_iter.next();
-                        
                     }
                 },
                 (Some(fa), None) => {
-                    self.output_buffer.records.push(fa.clone());
-                    first_a = a_iter.next();
+                    if b < b_end {
+                        b += 1;
+                        self.fetch_page(input_file_index, b, 1);
+                        b_iter = self.input_buffers[1].records.clone()
+                            .into_iter();
+                        first_b = b_iter.next();
+                        continue;
+                    } else {
+                        self.output_buffer.records.push(fa.clone());
+                        first_a = a_iter.next();
+                    }
                 },
                 (None, Some(fb)) => {
-                    self.output_buffer.records.push(fb.clone());
-                    first_b = b_iter.next();
+                    if a < a_end {
+                        a += 1;
+                        self.fetch_page(input_file_index, a, 0);
+                        a_iter = self.input_buffers[0].records.clone()
+                            .into_iter();
+                        first_a = a_iter.next();
+                        continue;
+                    } else {
+                        self.output_buffer.records.push(fb.clone());
+                        first_b = b_iter.next();
+                    }
                 },
             };
 
@@ -252,8 +271,8 @@ mod tests {
     
     #[test]
     fn it_works() {
-        let mut bp = BufferPoolManager::new("test2");
-        bp.merge(0, 1, 0, 1);
+        let mut bp = BufferPoolManager::new("test1");
+        bp.merge(0, 2, 1, 0, 1);
         
         assert_eq!(2 + 2, 4);
     }
