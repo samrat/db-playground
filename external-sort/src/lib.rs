@@ -111,6 +111,7 @@ fn write_record(offsets: RowOffsets, data: &mut [u8],
 fn serialize_records(records: Vec<(i32, Vec<u8>)>) -> [u8; PAGE_SIZE] {
     let mut storage = [0; PAGE_SIZE];
     let valsize = 4;
+    mem_move(&mut storage[0..8], &i32_to_bytearray(records.len() as i32));
     for (i, (k,v)) in records.into_iter().enumerate() {
         let offsets = compute_offsets(i, valsize);
         write_record(offsets, &mut storage, k, &v);
@@ -173,7 +174,7 @@ impl BufferPoolManager {
         records
     }
 
-    pub fn fetch_page(&mut self, input_file_index: usize,
+    fn fetch_page(&mut self, input_file_index: usize,
                       page_id: usize, bufpool_id: usize) {
         let offset = (page_id * PAGE_SIZE) as u64;
         println!("fetch_page: page_id={}", page_id);
@@ -185,6 +186,22 @@ impl BufferPoolManager {
             .expect("Could not read file");
         self.input_buffers[bufpool_id].records =
             self.read_records(&storage);
+    }
+
+    /// Sort records within pages(this is "pass 0" in the algorithm)
+    pub fn sort_pages(&mut self, num_pages: usize) {
+        for i in 0..num_pages {
+            // get from input file
+            self.fetch_page(0, i, 0);
+            self.input_buffers[0].sort();
+            let sorted_records = &self.input_buffers[0].records;
+            let new_page_data =
+                serialize_records(sorted_records.to_vec());
+            // write to file_a
+            Self::write_page(&self.files[1],
+                             i,
+                             &new_page_data);
+        }
     }
 
     // merge two `run`s
@@ -274,6 +291,7 @@ mod tests {
     #[test]
     fn it_works() {
         let mut bp = BufferPoolManager::new("test1");
+        bp.sort_pages(3);
         bp.merge(0, 2, 2, 0, 1);
         
         assert_eq!(2 + 2, 4);
