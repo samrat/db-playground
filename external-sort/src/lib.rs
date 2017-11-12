@@ -103,13 +103,13 @@ pub fn mem_move(dest: &mut [u8], src: &[u8]) {
 }
 
 pub struct BufferPoolManager {
-    input_file: File,
-    // runs of fileA go into fileB as they are sorted; in the next
-    // pass, runs from fileB get moved to fileA, and so on.
-    fileA: File,
-    fileB: File,
+    // runs of file_a go into file_b as they are sorted; in the next
+    // pass, runs from file_b get moved to file_a, and so on.
+    files: [File; 3],
     output_buffer: Page,
     input_buffers: Vec<Page>,
+    // how many records can a page hold
+    records_per_page: usize,
 }
 
 impl BufferPoolManager {
@@ -117,22 +117,21 @@ impl BufferPoolManager {
         let input_file = OpenOptions::new()
             .read(true)
             .open(input_filename);
-        let fileA = OpenOptions::new()
+        let file_a = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open("/tmp/fileA");
-        let fileB = OpenOptions::new()
+            .open("/tmp/file_a");
+        let file_b = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open("/tmp/fileB");
+            .open("/tmp/file_b");
         BufferPoolManager {
-            input_file: input_file.unwrap(),
-            fileA: fileA.unwrap(),
-            fileB: fileB.unwrap(),
+            files: [input_file.unwrap(), file_a.unwrap(),file_b.unwrap()],
             output_buffer: Page::new(),
-            input_buffers: vec![Page::new(), Page::new()]
+            input_buffers: vec![Page::new(), Page::new()],
+            records_per_page: (PAGE_SIZE - 1) / (4 + 4),
         }
     }
 
@@ -150,23 +149,26 @@ impl BufferPoolManager {
         records
     }
 
-    pub fn fetch_page(&mut self, page_id: usize, bufpool_id: usize) {
+    pub fn fetch_page(&mut self, input_file_index: usize,
+                      page_id: usize, bufpool_id: usize) {
         let offset = (page_id * PAGE_SIZE) as u64;
-        // TODO: file itself should change. ie. later passes must read
-        // from fileA, fileB
-        self.input_file.seek(SeekFrom::Start(offset))
+
+        let mut input_file = &self.files[input_file_index];
+        input_file.seek(SeekFrom::Start(offset))
             .expect("Could not seek to offset");
         let mut storage = [0; PAGE_SIZE];
-        self.input_file.read(&mut storage)
+        input_file.read(&mut storage)
             .expect("Could not read file");
         self.input_buffers[bufpool_id].records =
             self.read_records(&storage);
     }
+
     
-    fn merge(&mut self, a: usize, b: usize) {
+    fn merge(&mut self, a: usize, b: usize, 
+             input_file_index: usize, output_file_index: usize) {
         // fetch pages a and b into input buffers
-        self.fetch_page(a, 0);
-        self.fetch_page(b, 1);
+        self.fetch_page(input_file_index, a, 0);
+        self.fetch_page(input_file_index, b, 1);
         
         // merge a and b into output_buffer
         let mut a_iter = self.input_buffers[0].records
@@ -198,6 +200,9 @@ impl BufferPoolManager {
                 },
             }
 
+            if self.output_buffer.records.len() >= self.records_per_page {
+                println!("TODO: write to page");
+            }
             // TODO: check if output buffer is full(# records >
             // max). If it is full, write to file. And continue with
             // empty buffer.
@@ -214,7 +219,7 @@ mod tests {
     #[test]
     fn it_works() {
         let mut bp = BufferPoolManager::new("test2");
-        bp.merge(0, 1);
+        bp.merge(0, 1, 0, 1);
         
         assert_eq!(2 + 2, 4);
     }
