@@ -176,7 +176,7 @@ impl BufferPoolManager {
     pub fn fetch_page(&mut self, input_file_index: usize,
                       page_id: usize, bufpool_id: usize) {
         let offset = (page_id * PAGE_SIZE) as u64;
-
+        println!("fetch_page: page_id={}", page_id);
         let mut input_file = &self.files[input_file_index];
         input_file.seek(SeekFrom::Start(offset))
             .expect("Could not seek to offset");
@@ -187,7 +187,7 @@ impl BufferPoolManager {
             self.read_records(&storage);
     }
 
-    
+    // merge two `run`s
     fn merge(&mut self, mut a: usize, mut b: usize, run_size: usize,
              input_file_index: usize, output_file_index: usize) {
         // fetch pages a and b into input buffers
@@ -201,8 +201,8 @@ impl BufferPoolManager {
             .into_iter();
         let mut first_a = a_iter.next();
         let mut first_b = b_iter.next();
-        let a_end = a+run_size;
-        let b_end = b+run_size;
+        let a_end = a+run_size-1;
+        let b_end = b+run_size-1;
         
         let output_buffer = [0; PAGE_SIZE];
         // start filling at page a in output file
@@ -220,6 +220,7 @@ impl BufferPoolManager {
                     }
                 },
                 (Some(fa), None) => {
+                    println!("b={} b_end={}", b, b_end);
                     if b < b_end {
                         b += 1;
                         self.fetch_page(input_file_index, b, 1);
@@ -233,6 +234,7 @@ impl BufferPoolManager {
                     }
                 },
                 (None, Some(fb)) => {
+                    println!("a={} a_end={}", a, a_end);
                     if a < a_end {
                         a += 1;
                         self.fetch_page(input_file_index, a, 0);
@@ -272,7 +274,7 @@ mod tests {
     #[test]
     fn it_works() {
         let mut bp = BufferPoolManager::new("test1");
-        bp.merge(0, 2, 1, 0, 1);
+        bp.merge(0, 2, 2, 0, 1);
         
         assert_eq!(2 + 2, 4);
     }
