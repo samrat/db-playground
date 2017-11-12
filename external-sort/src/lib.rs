@@ -204,6 +204,17 @@ impl BufferPoolManager {
         }
     }
 
+    fn flush_output_buffer(&mut self, output_file_index: usize, output_page_id: usize) {
+        println!("page={}, writing {:?}", output_page_id, self.output_buffer.records);
+        let records = mem::replace(&mut self.output_buffer.records,
+                                   vec![]);
+        let new_page_data =
+            serialize_records(records);
+        Self::write_page(&self.files[output_file_index],
+                         output_page_id,
+                         &new_page_data);
+    }
+
     // merge two `run`s
     fn merge(&mut self, mut a: usize, mut b: usize, run_size: usize,
              input_file_index: usize, output_file_index: usize) {
@@ -269,18 +280,42 @@ impl BufferPoolManager {
             // check if output buffer is full(# records > max). If it
             // is full, write to file. And continue with empty buffer.
             if self.output_buffer.records.len() >= self.records_per_page {
-                let records = mem::replace(&mut self.output_buffer.records,
-                                           vec![]);
-                let new_page_data =
-                    serialize_records(records);
-                Self::write_page(&self.files[output_file_index],
-                                 output_page_id,
-                                 &new_page_data);
+                self.flush_output_buffer(output_file_index, output_page_id);
                 output_page_id += 1;
             }
         }
 
+        self.flush_output_buffer(output_file_index, output_page_id);
         println!("{:?}", self.output_buffer.records);
+    }
+
+    pub fn sort_all(num_pages: usize) {
+        let mut bp = BufferPoolManager::new("test1");
+        bp.sort_pages(num_pages);
+        let mut run_size = 1;
+
+        let mut src_file = 1;
+        let mut dest_file = 2;
+        while run_size <= (num_pages / 2) {
+            let group_size = run_size * 2;
+            let num_groups = num_pages / group_size;
+            println!("run_size = {}, group_size={} num_groups={}",
+                     run_size, group_size, num_groups);
+            for i in 0..num_groups {
+                let group_start = i*group_size;
+                let first_run = group_start;
+                let second_run = group_start + run_size;
+                bp.merge(first_run, second_run, run_size, src_file, dest_file);
+                println!("\tfirst_run: {} second_run: {}", first_run, second_run);
+            }
+
+            run_size *= 2;
+            let temp = src_file;
+            src_file = dest_file;
+            dest_file = temp;
+        }
+        println!("{:?}", bp.output_buffer.records);
+
     }
 }
 
@@ -291,8 +326,9 @@ mod tests {
     #[test]
     fn it_works() {
         let mut bp = BufferPoolManager::new("test1");
-        bp.sort_pages(3);
-        bp.merge(0, 2, 2, 0, 1);
+        // bp.sort_pages(3);
+        // bp.merge(0, 2, 2, 0, 1);
+        BufferPoolManager::sort_all(4);
         
         assert_eq!(2 + 2, 4);
     }
