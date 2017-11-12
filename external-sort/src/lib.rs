@@ -4,41 +4,17 @@ use std::io::SeekFrom;
 use std::io::prelude::*;
 use std::mem;
 
+mod util;
+use util::*;
+
 const PAGE_SIZE : usize = 4096;
 const HEADER_SIZE : usize = 8;  // page header
 
-fn bytearray_to_i32(b: Vec<u8>) -> i32 {
-    assert_eq!(b.len(), 4);
-    let mut a = [0; 4];
+// these are currently fixed at compile-time. Make this more generic
+// by bringing in a serialization/deserialization library.
+const KEY_SIZE : usize = 4;     // i32
+const VAL_SIZE : usize = 4;
 
-    for i in 0..b.len() {
-        a[i] = b[i];
-    }
-
-    unsafe {
-        mem::transmute::<[u8;4], i32>(a)
-    }
-}
-
-pub fn i32_to_bytearray(n: i32) -> [u8; 4] {
-    unsafe {
-        mem::transmute::<i32, [u8;4]>(n)
-    }
-}
-
-
-fn bytearray_to_usize(b: Vec<u8>) -> usize {
-    assert_eq!(b.len(), 8);
-    let mut a = [0; 8];
-
-    for i in 0..b.len() {
-        a[i] = b[i];
-    }
-
-    unsafe {
-        mem::transmute::<[u8;8], usize>(a)
-    }
-}
 
 struct RowOffsets {
     key_offset: usize,
@@ -49,7 +25,6 @@ struct RowOffsets {
 // Representation of a file page resident in buffer pool
 struct Page {
     pub id: usize,
-    // pub storage: [u8; PAGE_SIZE],
     pub records: Vec<(i32,Vec<u8>)>,
     pub num_records: usize,
 }
@@ -67,12 +42,10 @@ impl Page {
         self.records.sort_by(|&(ref ak, ref av), &(ref bk, ref bv)|
                              ak.cmp(&bk));
     }
-
 }
 
 fn compute_offsets(row_num: usize, valsize: usize) -> RowOffsets {
-    let keysize = 4;        // i32
-    // let valsize = mem::size_of::<V>();
+    let keysize = KEY_SIZE;        // i32
     let total_size = keysize + valsize;
 
     let row_offset = HEADER_SIZE + (row_num * total_size);
@@ -110,7 +83,7 @@ fn write_record(offsets: RowOffsets, data: &mut [u8],
 
 fn serialize_records(records: Vec<(i32, Vec<u8>)>) -> [u8; PAGE_SIZE] {
     let mut storage = [0; PAGE_SIZE];
-    let valsize = 4;
+    let valsize = VAL_SIZE;
     mem_move(&mut storage[0..8], &i32_to_bytearray(records.len() as i32));
     for (i, (k,v)) in records.into_iter().enumerate() {
         let offsets = compute_offsets(i, valsize);
@@ -165,7 +138,7 @@ impl BufferPoolManager {
         let num_records = bytearray_to_usize(num_records_bytes);
         println!("num_records: {}", num_records);
         let mut records = Vec::with_capacity(num_records);
-        let valsize = 4;        // NOTE: fixed size(hacky)
+        let valsize = VAL_SIZE;
         for i in 0..num_records {
             let offsets = compute_offsets(i, valsize);
             records.push(read_record(offsets, data.to_vec()));
@@ -286,7 +259,6 @@ impl BufferPoolManager {
         }
 
         self.flush_output_buffer(output_file_index, output_page_id);
-        println!("{:?}", self.output_buffer.records);
     }
 
     pub fn sort_all(num_pages: usize) {
@@ -314,8 +286,7 @@ impl BufferPoolManager {
             src_file = dest_file;
             dest_file = temp;
         }
-        println!("{:?}", bp.output_buffer.records);
-
+        println!("wrote to file {:?}", dest_file);
     }
 }
 
