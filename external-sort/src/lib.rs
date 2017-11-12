@@ -1,3 +1,4 @@
+use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::SeekFrom;
@@ -92,7 +93,7 @@ fn serialize_records(records: Vec<(i32, Vec<u8>)>) -> [u8; PAGE_SIZE] {
     storage
 }
 
-pub struct BufferPoolManager {
+pub struct ExternalMergeSort {
     // runs of file_a go into file_b as they are sorted; in the next
     // pass, runs from file_b get moved to file_a, and so on.
     files: [File; 3],
@@ -102,8 +103,8 @@ pub struct BufferPoolManager {
     records_per_page: usize,
 }
 
-impl BufferPoolManager {
-    pub fn new(input_filename: &str) -> BufferPoolManager {
+impl ExternalMergeSort {
+    fn new(input_filename: &str) -> ExternalMergeSort {
         let input_file = OpenOptions::new()
             .read(true)
             .open(input_filename);
@@ -117,7 +118,7 @@ impl BufferPoolManager {
             .write(true)
             .create(true)
             .open("/tmp/file_b");
-        BufferPoolManager {
+        ExternalMergeSort {
             files: [input_file.unwrap(), file_a.unwrap(),file_b.unwrap()],
             output_buffer: Page::new(),
             input_buffers: vec![Page::new(), Page::new()],
@@ -262,7 +263,7 @@ impl BufferPoolManager {
         self.flush_output_buffer(output_file_index, output_page_id);
     }
 
-    pub fn sort_all(&mut self, num_pages: usize) {
+    pub fn sort_all(&mut self, num_pages: usize) -> usize {
         self.sort_pages(num_pages);
         let mut run_size = 1;
 
@@ -286,18 +287,32 @@ impl BufferPoolManager {
             src_file = dest_file;
             dest_file = temp;
         }
-        println!("wrote to file {:?}", dest_file);
+        // last file written to
+        src_file
+    }
+
+    pub fn sort_file(input_filename: &str, output_filename: &str) {
+        let mut ems = ExternalMergeSort::new(input_filename);
+        let num_bytes = std::fs::metadata("test1").ok().unwrap().len();
+        let num_pages = (num_bytes as f32 / PAGE_SIZE as f32).ceil() as usize;
+        let file_index = ems.sort_all(num_pages);
+        let filename = match file_index {
+            1 => "/tmp/file_a",
+            2 => "/tmp/file_b",
+            _ => panic!("impossible"),
+        };
+        fs::rename(filename, output_filename);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use BufferPoolManager;
+    use ExternalMergeSort;
     
     #[test]
     fn it_works() {
-        let mut bp = BufferPoolManager::new("test1");
-        bp.sort_all(4);
+        let mut bp = ExternalMergeSort::sort_file("test1", "/tmp/foo");
+        // bp.sort_all(4);
         
         assert_eq!(2 + 2, 4);
     }
