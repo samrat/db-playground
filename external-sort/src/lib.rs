@@ -333,6 +333,7 @@ mod tests {
     use util::*;
     use PAGE_SIZE;
 
+    use std::fs;
     use std::fs::OpenOptions;
     use std::io::prelude::*;
     use std::io::SeekFrom;
@@ -340,7 +341,7 @@ mod tests {
     extern crate rand;
     use tests::rand::Rng;
 
-    fn create_rand_file() -> Vec<(i32, Vec<u8>)> {
+    fn create_rand_file(num_pages: usize) -> Vec<(i32, Vec<u8>)> {
         let records_per_page = 511;
         let mut rng = rand::thread_rng();
         let file = OpenOptions::new()
@@ -351,7 +352,7 @@ mod tests {
             .ok()
             .unwrap();
         let mut all_records = Vec::with_capacity(8*records_per_page);
-        for p in 0..8 {
+        for p in 0..num_pages {
             let mut records = Vec::with_capacity(records_per_page);
             for i in 0..records_per_page {
                 records.push((rng.gen::<i32>(), vec![111,0,0,0]));
@@ -367,7 +368,10 @@ mod tests {
 
     #[test]
     fn test_sort() {
-        let expected = create_rand_file();
+        fs::remove_file("/tmp/gen_rand");
+        fs::remove_file("/tmp/gen_rand-sorted");
+        let num_pages = 128;
+        let expected = create_rand_file(num_pages);
         ExternalMergeSort::sort_file("/tmp/gen_rand", "/tmp/gen_rand-sorted");
 
         let mut file = OpenOptions::new()
@@ -378,9 +382,9 @@ mod tests {
             .ok()
             .unwrap();
         let mut actual = vec![];
-        for i in 0..8 {
+        for i in 0..num_pages {
             let mut storage = [0; PAGE_SIZE];
-            file.seek(SeekFrom::Start(i*PAGE_SIZE as u64))
+            file.seek(SeekFrom::Start((i*PAGE_SIZE) as u64))
                 .expect("Could not seek to offset");
             file.read(&mut storage)
                 .expect("Could not read file");
@@ -394,7 +398,7 @@ mod tests {
     fn it_works() {
         let mut bp = ExternalMergeSort::sort_file("/tmp/randfile", "/tmp/randfile-sorted");
         // bp.sort_all(4);
-        println!("{:?}", create_rand_file());
+        // println!("{:?}", create_rand_file(2));
         assert_eq!(2 + 2, 4);
     }
 }
