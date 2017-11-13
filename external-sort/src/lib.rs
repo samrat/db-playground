@@ -137,7 +137,6 @@ impl ExternalMergeSort {
     pub fn read_records(data: &[u8]) -> Vec<(i32,Vec<u8>)> {
         let num_records_bytes = data[0..8].to_vec();
         let num_records = bytearray_to_usize(num_records_bytes);
-        println!("num_records: {}", num_records);
         let mut records = Vec::with_capacity(num_records);
         let keysize = KEY_SIZE;
         let valsize = VAL_SIZE;
@@ -152,7 +151,6 @@ impl ExternalMergeSort {
     fn fetch_page(&mut self, input_file_index: usize,
                       page_id: usize, bufpool_id: usize) {
         let offset = (page_id * PAGE_SIZE) as u64;
-        println!("fetch_page: page_id={}", page_id);
         let mut input_file = &self.files[input_file_index];
         input_file.seek(SeekFrom::Start(offset))
             .expect("Could not seek to offset");
@@ -180,7 +178,6 @@ impl ExternalMergeSort {
     }
 
     fn flush_output_buffer(&mut self, output_file_index: usize, output_page_id: usize) {
-        // println!("page={}, writing {:?}", output_page_id, self.output_buffer.records);
         let records = mem::replace(&mut self.output_buffer.records,
                                    vec![]);
         let new_page_data =
@@ -223,7 +220,6 @@ impl ExternalMergeSort {
                     }
                 },
                 (Some(fa), None) => {
-                    println!("b={} b_end={}", b, b_end);
                     if b < b_end {
                         b += 1;
                         self.fetch_page(input_file_index, b, 1);
@@ -237,7 +233,6 @@ impl ExternalMergeSort {
                     }
                 },
                 (None, Some(fb)) => {
-                    println!("a={} a_end={}", a, a_end);
                     if a < a_end {
                         a += 1;
                         self.fetch_page(input_file_index, a, 0);
@@ -263,6 +258,15 @@ impl ExternalMergeSort {
         self.flush_output_buffer(output_file_index, output_page_id);
     }
 
+    /// Returns name of file in `files`
+    fn get_file_name(file_index: usize) -> &'static str {
+        match file_index {
+            1 => "/tmp/file_a",
+            2 => "/tmp/file_b",
+            _ => panic!("impossible"),
+        }
+    }
+
     pub fn sort_all(&mut self, num_pages: usize) -> usize {
         self.sort_pages(num_pages);
         let mut run_size = 1;
@@ -279,17 +283,12 @@ impl ExternalMergeSort {
                 let first_run = group_start;
                 let second_run = group_start + run_size;
                 self.merge(first_run, second_run, run_size, src_file, dest_file);
-                println!("\tfirst_run: {} second_run: {}", first_run, second_run);
             }
 
             run_size *= 2;
 
             // delete the file whose pages we just merged
-            let src_file_name = match src_file {
-                1 => "/tmp/file_a",
-                2 => "/tmp/file_b",
-                _ => panic!("impossible"),
-            };
+            let src_file_name = Self::get_file_name(src_file);
             fs::remove_file(src_file_name);
             // create a new file to use as the destination in next
             // iteration
@@ -316,11 +315,7 @@ impl ExternalMergeSort {
         let num_bytes = std::fs::metadata(input_filename).ok().unwrap().len();
         let num_pages = (num_bytes as f32 / PAGE_SIZE as f32).ceil() as usize;
         let file_index = ems.sort_all(num_pages);
-        let filename = match file_index {
-            1 => "/tmp/file_a",
-            2 => "/tmp/file_b",
-            _ => panic!("impossible"),
-        };
+        let filename = Self::get_file_name(file_index);
         fs::rename(filename, output_filename);
     }
 }
