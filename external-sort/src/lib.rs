@@ -40,7 +40,7 @@ impl Page {
     }
 
     pub fn sort(&mut self) {
-        self.records.sort_by(|&(ref ak, ref av), &(ref bk, ref bv)|
+        self.records.sort_by(|&(ref ak, ref _av), &(ref bk, ref _bv)|
                              ak.cmp(&bk));
     }
 }
@@ -204,7 +204,6 @@ impl ExternalMergeSort {
         let a_end = a+run_size-1;
         let b_end = b+run_size-1;
 
-        let output_buffer = [0; PAGE_SIZE];
         // start filling at page a in output file
         let mut output_page_id = a;
         loop {
@@ -296,7 +295,7 @@ impl ExternalMergeSort {
 
             // delete the file whose pages we just merged
             let src_file_name = Self::get_file_name(src_file);
-            fs::remove_file(src_file_name);
+            fs::remove_file(src_file_name).ok();
             // create a new file to use as the destination in next
             // iteration
             let new_src_file = OpenOptions::new()
@@ -323,7 +322,7 @@ impl ExternalMergeSort {
         let num_pages = (num_bytes as f32 / PAGE_SIZE as f32).ceil() as usize;
         let file_index = ems.sort_all(num_pages);
         let filename = Self::get_file_name(file_index);
-        fs::rename(filename, output_filename);
+        fs::rename(filename, output_filename).ok();
     }
 }
 
@@ -332,7 +331,6 @@ impl ExternalMergeSort {
 mod tests {
     use ExternalMergeSort;
     use serialize_records;
-    use util::*;
     use PAGE_SIZE;
 
     use std::fs;
@@ -356,7 +354,7 @@ mod tests {
         let mut all_records = Vec::with_capacity(8*records_per_page);
         for p in 0..num_pages {
             let mut records = Vec::with_capacity(records_per_page);
-            for i in 0..records_per_page {
+            for _ in 0..records_per_page {
                 records.push((rng.gen::<i32>(), vec![111,0,0,0]));
             }
             let storage = serialize_records(records.clone());
@@ -370,8 +368,8 @@ mod tests {
 
     #[test]
     fn test_sort() {
-        fs::remove_file("/tmp/gen_rand");
-        fs::remove_file("/tmp/gen_rand-sorted");
+        fs::remove_file("/tmp/gen_rand").ok();
+        fs::remove_file("/tmp/gen_rand-sorted").ok();
         let num_pages = 128;
         let expected = create_rand_file(num_pages);
         ExternalMergeSort::sort_file("/tmp/gen_rand", "/tmp/gen_rand-sorted");
@@ -398,7 +396,7 @@ mod tests {
     }
 
     fn it_works() {
-        let mut bp = ExternalMergeSort::sort_file("/tmp/randfile", "/tmp/randfile-sorted");
+        ExternalMergeSort::sort_file("/tmp/randfile", "/tmp/randfile-sorted");
         // bp.sort_all(4);
         // println!("{:?}", create_rand_file(2));
         assert_eq!(2 + 2, 4);
