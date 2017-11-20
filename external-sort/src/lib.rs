@@ -208,44 +208,51 @@ impl ExternalMergeSort {
         // start filling at page a in output file
         let mut output_page_id = a;
         loop {
-            match (first_a.clone(), first_b.clone()) {
-                (None, None) => break,
-                (Some(fa), Some(fb)) => {
+            enum WhichToNext {
+                A,
+                B,
+            }
+            let which_to_next;
+            match (&first_a, &first_b) {
+                (&None, &None) => break,
+                (&Some(ref fa), &Some(ref fb)) => {
                     if fa.0 < fb.0 {
                         self.output_buffer.records.push(fa.clone());
-                        first_a = a_iter.next();
+                        which_to_next = WhichToNext::A;
                     } else {
                         self.output_buffer.records.push(fb.clone());
-                        first_b = b_iter.next();
+                        which_to_next = WhichToNext::B;
                     }
                 },
-                (Some(fa), None) => {
+                (&Some(ref fa), &None) => {
                     if b < b_end {
                         b += 1;
                         self.fetch_page(input_file_index, b, 1);
                         b_iter = self.input_buffers[1].records.clone()
                             .into_iter();
-                        first_b = b_iter.next();
-                        continue;
+                        which_to_next = WhichToNext::B;
                     } else {
                         self.output_buffer.records.push(fa.clone());
-                        first_a = a_iter.next();
+                        which_to_next = WhichToNext::A;
                     }
                 },
-                (None, Some(fb)) => {
+                (&None, &Some(ref fb)) => {
                     if a < a_end {
                         a += 1;
                         self.fetch_page(input_file_index, a, 0);
-                        a_iter = self.input_buffers[0].records.clone()
-                            .into_iter();
-                        first_a = a_iter.next();
-                        continue;
+                        a_iter = self.input_buffers[0].records.clone().into_iter();
+                        which_to_next = WhichToNext::A;
                     } else {
                         self.output_buffer.records.push(fb.clone());
-                        first_b = b_iter.next();
+                        which_to_next = WhichToNext::B;
                     }
                 },
             };
+
+            match which_to_next {
+                WhichToNext::A => first_a = a_iter.next(),
+                WhichToNext::B => first_b = b_iter.next(),
+            }
 
             // check if output buffer is full(# records > max). If it
             // is full, write to file. And continue with empty buffer.
