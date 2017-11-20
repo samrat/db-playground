@@ -64,7 +64,7 @@ fn compute_offsets(row_num: usize, keysize: usize, valsize: usize) -> RowOffsets
 fn read_record(offsets: RowOffsets, data: Vec<u8>)
                -> (i32,Vec<u8>) {
     let key = bytearray_to_i32(
-        data[offsets.key_offset..offsets.val_offset].to_vec());
+        &data[offsets.key_offset..offsets.val_offset]);
     let val = data[offsets.val_offset..offsets.row_end].to_vec();
     (key, val)
 }
@@ -136,7 +136,7 @@ impl ExternalMergeSort {
 
     pub fn read_records(data: &[u8]) -> Vec<(i32,Vec<u8>)> {
         let num_records_bytes = data[0..8].to_vec();
-        let num_records = bytearray_to_usize(num_records_bytes);
+        let num_records = bytearray_to_usize(&num_records_bytes);
         let mut records = Vec::with_capacity(num_records);
         let keysize = KEY_SIZE;
         let valsize = VAL_SIZE;

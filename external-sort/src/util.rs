@@ -1,12 +1,8 @@
 use std::mem;
 
-pub fn bytearray_to_i32(b: Vec<u8>) -> i32 {
-    assert_eq!(b.len(), 4);
+pub fn bytearray_to_i32(b: &[u8]) -> i32 {
     let mut a = [0; 4];
-
-    for i in 0..b.len() {
-        a[i] = b[i];
-    }
+    a.copy_from_slice(b);
 
     unsafe {
         mem::transmute::<[u8;4], i32>(a)
@@ -20,13 +16,9 @@ pub fn i32_to_bytearray(n: i32) -> [u8; 4] {
 }
 
 
-pub fn bytearray_to_usize(b: Vec<u8>) -> usize {
-    assert_eq!(b.len(), 8);
+pub fn bytearray_to_usize(b: &[u8]) -> usize {
     let mut a = [0; 8];
-
-    for i in 0..b.len() {
-        a[i] = b[i];
-    }
+    a.copy_from_slice(b);
 
     unsafe {
         mem::transmute::<[u8;8], usize>(a)
